@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion-Based Music Recommender</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>EMOTIONS BASED MUSIC RECOMMENDER</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flashes">
+                    {% for category, message in messages %}
+                        <li class="{{ category }}">{{ message }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Emotion Detection Form -->
+        <div class="emotion-form">
+            <h2>Upload or Capture Image for Emotion Detection</h2>
+            <form method="POST" enctype="multipart/form-data">
+                <!-- File Upload -->
+                <div class="input-group">
+                    <label for="file-upload" class="upload-btn">
+                        Upload Image
+                        <input type="file" id="file-upload" name="image" accept="image/*" capture="environment">
+                    </label>
+                    <span class="or-text">OR</span>
+                    <!-- Camera Capture -->
+                    <button type="button" id="camera-btn" class="camera-btn">
+                        Open Camera
+                    </button>
+                </div>
+                
+                <!-- Camera Preview -->
+                <div id="camera-preview" class="camera-preview" style="display: none;">
+                    <video id="video" autoplay></video>
+                    <canvas id="canvas" style="display:none;"></canvas>
+                    <button type="button" id="capture-btn" class="capture-btn">Capture</button>
+                </div>
+
+                <!-- Captured Image Preview -->
+                <img id="captured-image" style="display:none; max-width:100%; margin-top:10px; border-radius: 10px;" />
+
+                <!-- Animated Submit Button -->
+                <div id="button-wrapper">
+                    <a class="submit" href="#" id="animated-submit-btn">Submit</a>
+                    <div class="loader-wrapper">
+                        <span class="loader yellow"></span>
+                        <span class="loader pink"></span>
+                    </div>
+                    <span class="loader orange"></span>
+                    <div class="check-wrapper">
+                        <svg version="1.1" width="65px" height="38px" viewBox="0 0 64.5 37.4">
+                            <polyline class="check" points="5,13 21.8,32.4 59.5,5 "/>
+                        </svg>
+                    </div>
+                </div>
+            </form>
+        </div>
+        {% if emotion == "black_image" or emotion == "no_face" %}
+    <p class="text-center text-muted mt-4">No human face detected.</p>
+    <img src="{{ url_for('static', filename='images/no_face.png') }}" class="img-fluid mt-3" alt="No face detected">
+{% endif %}
+
+
+        {% if tracks %}
+            <div class="recommendation">
+                <h3>Recommended Music for Emotion: {{ emotion }}</h3>
+                <ul>
+                    {% for track in tracks %}
+                        <li><a href="{{ track }}" target="_blank">Listen on Spotify</a></li>
+                        <iframe src="https://open.spotify.com/embed/track/{{ track.split('/')[-1] }}" width="300" height="80" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Select necessary elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('capture-btn');
+        const cameraBtn = document.getElementById('camera-btn');
+        const fileUpload = document.getElementById('file-upload');
+        const animatedSubmitBtn = document.getElementById('animated-submit-btn');
+        const cameraPreview = document.getElementById('camera-preview');
+        const capturedImage = document.getElementById('captured-image');
+
+        let stream;
+
+        // Open Camera
+        cameraBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                cameraPreview.style.display = 'block';
+                cameraBtn.style.display = 'none';
+                fileUpload.style.display = 'none';
+            } catch (err) {
+                alert('Error accessing camera: ' + err.message);
+            }
+        });
+
+        // Capture Image
+        captureBtn.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+
+            const dataUrl = canvas.toDataURL('image/png');
+            capturedImage.src = dataUrl;
+            capturedImage.style.display = 'block';
+
+            canvas.toBlob((blob) => {
+                const file = new File([blob], 'capture.png', { type: 'image/png' });
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileUpload.files = dataTransfer.files;
+
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                cameraPreview.style.display = 'none';
+                animatedSubmitBtn.style.display = 'block';
+            }, 'image/png');
+        });
+
+        fileUpload.addEventListener('change', () => {
+            if (fileUpload.files.length > 0) {
+                animatedSubmitBtn.style.display = 'block';
+            }
+        });
+
+        animatedSubmitBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('button-wrapper').classList.add('checked');
+            setTimeout(() => {
+                document.querySelector('form').submit();
+            }, 5000);
+        });
+    </script>
+
+    <script>
+        function playSong(index) {
+            let player = document.getElementById("player" + index);
+            player.src += "?autoplay=1";
+        }
+
+        function pauseSong(index) {
+            let player = document.getElementById("player" + index);
+            player.src = player.src.replace("?autoplay=1", "");
+        }
+
+        function continueSong(index) {
+            playSong(index);
+        }
+    </script>
+<script>
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;  // Keep the mic listening continuously
+    recognition.lang = 'en-US';
+
+    const commandState = {
+        openCamera: false,
+        capture: false,
+        submit: false
+    };
+
+    const checkAllCommandsDone = () => {
+        return commandState.openCamera && commandState.capture && commandState.submit;
+    };
+
+    recognition.onresult = (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+        console.log("Voice Command:", transcript);
+
+        if (!commandState.openCamera && transcript.includes("open camera")) {
+            document.getElementById("camera-btn").click();
+            commandState.openCamera = true;
+            console.log("Camera opened");
+        } else if (!commandState.capture && transcript.includes("capture")) {
+            document.getElementById("capture-btn").click();
+            commandState.capture = true;
+            console.log("Image captured");
+        } else if (!commandState.submit && transcript.includes("submit")) {
+            document.getElementById("animated-submit-btn").click();
+            commandState.submit = true;
+            console.log("Submitted");
+        }
+
+        if (checkAllCommandsDone()) {
+            // You can log a message here, but don't stop the recognition
+            console.log("🎤 All commands done. Continuing to listen for more commands.");
+        }
+    };
+
+    recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+    };
+
+    // Create one-time voice trigger button
+    const voiceBtn = document.createElement("button");
+    voiceBtn.innerText = "🎤 Voice Command";
+    voiceBtn.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        font-size: 16px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        z-index: 9999;
+    `;
+
+    voiceBtn.addEventListener("click", () => {
+        // Reset previous command states
+        for (let key in commandState) {
+            commandState[key] = false;
+        }
+
+        try {
+            recognition.start();
+            console.log("🎤 Listening for: 'open camera', 'capture', 'submit'");
+            voiceBtn.disabled = true;
+            voiceBtn.innerText = "🎤 Listening...";
+        } catch (e) {
+            console.error("Voice recognition start error:", e);
+        }
+    });
+
+    document.body.appendChild(voiceBtn);
+</script>
+
+
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+</body>
+</html>
